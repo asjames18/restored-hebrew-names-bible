@@ -1,0 +1,16 @@
+{
+  "Romans 10:13": {
+    "replacements": {
+      "Lord": "YAHUAH"
+    },
+    "witnesses": ["cepher", "dabar_yahuah"],
+    "note": "OT quote placement"
+  },
+  "Psalm 68:4": {
+    "replacements": {
+      "JAH": "YAH"
+    },
+    "witnesses": ["kjv_token"],
+    "note": "KJV contains JAH"
+  }
+}
