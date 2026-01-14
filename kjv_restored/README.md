@@ -109,6 +109,9 @@ python -m kjv_restored --in input.txt --out output.txt --no-verse-aware
 # Generate override checklist
 python -m kjv_restored --make-checklist checklist.json --in data/sample_verses.json
 
+# Automated witness checking (requires local Bible files)
+python -m kjv_restored --auto-check --in data/kjv_verses.json --cepher-file data/cepher.json --dabar-yahuah-file data/dabar_yahuah.json --auto-overrides-output overrides.json
+
 # Build full Bible document
 python -m kjv_restored --build-bible --kjv data/kjv_verses.json --outdir out/ --title "The Restored Names KJV (RRG Standard v1.0)" --strict
 ```
@@ -185,6 +188,119 @@ The checklist identifies:
 ```
 
 **Important**: The checklist never includes or stores any verse text from Cepher Bible or Dâbâr Yahuah. It only contains verse references and suggestions for manual review. Users fill out the checklist AFTER manually checking Cepher/Yahuah Bible placements.
+
+## Automated Witness Checking
+
+The `--auto-check` command automates the process of checking verses against local copies of Cepher Bible and Dâbâr Yahuah Bible files.
+
+### Prerequisites
+
+You must have local files containing the witness Bible texts. Supported formats:
+
+**JSON Format** (same format as KJV input):
+```json
+[
+  {
+    "book": "Genesis",
+    "chapter": 1,
+    "verse": 1,
+    "text": "In the beginning ELOHIYM created..."
+  },
+  ...
+]
+```
+
+**DOCX Format** (Word document):
+- Book names as headings (Heading 1 style or all caps)
+- Chapter headings (Heading 2 style or "Chapter X")
+- Verses with verse numbers (superscript or inline) followed by text
+- Example: "1 In the beginning ELOHIYM created..."
+
+**Important**: 
+- You must provide your own local copies of these Bible files
+- The tool does NOT download or scrape these files from the internet
+- The tool does NOT redistribute these files
+- You are responsible for obtaining these files legally
+- DOCX parsing attempts to extract verse structure automatically
+
+### Running Automated Checks
+
+```powershell
+# Using JSON files
+python -m kjv_restored --auto-check `
+  --in data/kjv_verses.json `
+  --cepher-file data/cepher.json `
+  --dabar-yahuah-file data/dabar_yahuah.json `
+  --auto-overrides-output overrides.json `
+  --min-witnesses 2 `
+  --out check_report.json
+
+# Using DOCX files
+python -m kjv_restored --auto-check `
+  --in data/kjv_verses.json `
+  --cepher-file data/cepher_bible.docx `
+  --dabar-yahuah-file data/dabar_yahuah_bible.docx `
+  --auto-overrides-output overrides.json `
+  --min-witnesses 2
+```
+
+### Options
+
+- `--cepher-file`: Path to Cepher Bible JSON file (at least one witness file required)
+- `--dabar-yahuah-file`: Path to Dâbâr Yahuah Bible JSON file (at least one witness file required)
+- `--min-witnesses`: Minimum number of witnesses required (1 or 2)
+  - `1`: Create overrides if found in either witness
+  - `2`: Only create overrides if found in both witnesses (more conservative)
+- `--auto-overrides-output`: File to save auto-generated overrides (will merge with existing overrides)
+- `--out`: Optional file to save detailed check report
+
+### How It Works
+
+1. **Loads witness files**: Reads your local Cepher and Dâbâr Yahuah Bible files
+2. **Compares verses**: For each KJV verse, checks if it exists in witness files
+3. **Analyzes names**: Detects which restored names (YAHUAH, YAHUSHA, etc.) appear in witness texts
+4. **Suggests replacements**: Automatically suggests replacements based on witness usage
+5. **Generates overrides**: Creates `overrides.json` entries with witness metadata
+
+### Example Output
+
+```
+Loading witness files...
+Checking 31102 verses against witnesses...
+
+Check Results:
+  Total verses checked: 31102
+  Found in Cepher: 31098
+  Found in Dâbâr Yahuah: 31095
+  With suggested replacements: 2847
+
+Generating overrides (min_witnesses=2)...
+Generated 2847 override entries: overrides.json
+```
+
+### Generated Overrides Format
+
+The auto-generated overrides follow the standard format:
+
+```json
+{
+  "Genesis 1:1": {
+    "replacements": {
+      "God": "ELOHIYM"
+    },
+    "witnesses": ["cepher", "dabar_yahuah"],
+    "note": "Auto-generated from witness check (min_witnesses=2)"
+  }
+}
+```
+
+### Reviewing Auto-Generated Overrides
+
+**Always review** auto-generated overrides before using them:
+- Check a sample of generated overrides manually
+- Verify the suggestions make sense in context
+- Adjust `--min-witnesses` if too many/few overrides are generated
+- Manually edit `overrides.json` to refine decisions
 
 ## Overrides File
 
@@ -315,6 +431,7 @@ Create a JSON file (e.g., `data/kjv_verses.json`) with all verses in the format 
 
 ### Building the Bible
 
+**Bash/Linux/Mac:**
 ```bash
 python -m kjv_restored --build-bible \
   --kjv data/kjv_verses.json \
@@ -322,6 +439,21 @@ python -m kjv_restored --build-bible \
   --title "The Restored Names KJV (RRG Standard v1.0)" \
   --version "v1.0" \
   --strict
+```
+
+**PowerShell (Windows):**
+```powershell
+python -m kjv_restored --build-bible `
+  --kjv data/kjv_verses.json `
+  --outdir out/ `
+  --title "The Restored Names KJV (RRG Standard v1.0)" `
+  --version "v1.0" `
+  --strict
+```
+
+**Or on a single line:**
+```powershell
+python -m kjv_restored --build-bible --kjv data/kjv_verses.json --outdir out/ --title "The Restored Names KJV (RRG Standard v1.0)" --version "v1.0" --strict
 ```
 
 This command generates:

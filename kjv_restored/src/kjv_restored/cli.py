@@ -14,6 +14,7 @@ from kjv_restored.assembler import BibleAssembler
 from kjv_restored.export_docx import DOCXExporter
 from kjv_restored.export_pdf import PDFExporter
 from kjv_restored.books import normalize_book_name
+from kjv_restored.witness_checker import WitnessChecker
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -122,6 +123,35 @@ Examples:
         help='Fail if YAH-short overrides lack required witnesses (for build-bible)'
     )
     
+    # Automated witness checking
+    parser.add_argument(
+        '--auto-check',
+        action='store_true',
+        help='Automatically check verses against local witness files'
+    )
+    parser.add_argument(
+        '--cepher-file',
+        type=str,
+        help='Path to local Cepher Bible file (JSON or DOCX, for --auto-check)'
+    )
+    parser.add_argument(
+        '--dabar-yahuah-file',
+        type=str,
+        help='Path to local Dâbâr Yahuah Bible file (JSON or DOCX, for --auto-check)'
+    )
+    parser.add_argument(
+        '--min-witnesses',
+        type=int,
+        default=1,
+        choices=[1, 2],
+        help='Minimum witnesses required for auto-generated overrides (1 or 2, default: 1)'
+    )
+    parser.add_argument(
+        '--auto-overrides-output',
+        type=str,
+        help='Output file for auto-generated overrides (for --auto-check)'
+    )
+    
     return parser
 
 
@@ -194,6 +224,15 @@ def handle_build_bible(args) -> int:
         if normalized not in books_list:
             books_list.append(normalized)
     
+    # Process verses once to collect stats (even if exports fail)
+    print("Processing verses...", file=sys.stderr)
+    converter._applied_overrides = []
+    converter._heuristic_replacements = []
+    converter._ambiguous_lords = []
+    events_for_stats = assembler.assemble(verses, progress_callback=progress_callback)
+    # Consume events to collect stats
+    list(events_for_stats)
+    
     # Export to DOCX
     print("Generating DOCX...", file=sys.stderr)
     try:
@@ -236,7 +275,7 @@ def handle_build_bible(args) -> int:
         import traceback
         traceback.print_exc()
     
-    # Generate report
+    # Generate report (stats should already be collected from export passes)
     report = assembler.generate_report(args.title, args.version)
     report_path = outdir / "restored_names_kjv.report.json"
     save_report(report_path, report)
@@ -248,6 +287,101 @@ def handle_build_bible(args) -> int:
     print(f"  Chapters: {report['statistics']['chapters_processed']}", file=sys.stderr)
     print(f"  Applied overrides: {report['statistics']['applied_overrides']}", file=sys.stderr)
     print(f"  Ambiguous Lords: {report['statistics']['ambiguous_lords']}", file=sys.stderr)
+    
+    return 0
+
+
+def handle_auto_check(args) -> int:
+    """
+    Handle automated witness checking.
+    
+    Args:
+        args: Parsed command-line arguments
+        
+    Returns:
+        Exit code (0 for success, non-zero for error)
+    """
+    if not args.input_file:
+        print("Error: --auto-check requires --in to specify KJV verses JSON file", file=sys.stderr)
+        return 1
+    
+    if not args.cepher_file and not args.dabar_yahuah_file:
+        print("Error: --auto-check requires at least one of --cepher-file or --dabar-yahuah-file", file=sys.stderr)
+        return 1
+    
+    input_path = Path(args.input_file)
+    if not input_path.exists():
+        print(f"Error: Input file not found: {input_path}", file=sys.stderr)
+        return 1
+    
+    # Load KJV verses
+    with open(input_path, 'r', encoding='utf-8') as f:
+        verses = json.load(f)
+    
+    if not isinstance(verses, list):
+        print("Error: Input JSON must be a list of verse objects", file=sys.stderr)
+        return 1
+    
+    # Initialize witness checker
+    cepher_path = Path(args.cepher_file) if args.cepher_file else None
+    dabar_path = Path(args.dabar_yahuah_file) if args.dabar_yahuah_file else None
+    
+    print(f"Loading witness files...", file=sys.stderr)
+    checker = WitnessChecker(cepher_file=cepher_path, dabar_yahuah_file=dabar_path)
+    
+    if not checker.cepher_verses and not checker.dabar_yahuah_verses:
+        print("Error: No witness files could be loaded", file=sys.stderr)
+        return 1
+    
+    print(f"Checking {len(verses)} verses against witnesses...", file=sys.stderr)
+    check_results = checker.check_batch(verses)
+    
+    # Generate statistics
+    cepher_found = sum(1 for r in check_results if r['cepher_found'])
+    dabar_found = sum(1 for r in check_results if r['dabar_yahuah_found'])
+    with_suggestions = sum(1 for r in check_results if r['suggested_replacements'])
+    
+    print(f"\nCheck Results:", file=sys.stderr)
+    print(f"  Total verses checked: {len(verses)}", file=sys.stderr)
+    print(f"  Found in Cepher: {cepher_found}", file=sys.stderr)
+    print(f"  Found in Dâbâr Yahuah: {dabar_found}", file=sys.stderr)
+    print(f"  With suggested replacements: {with_suggestions}", file=sys.stderr)
+    
+    # Generate overrides if requested
+    if args.auto_overrides_output:
+        print(f"\nGenerating overrides (min_witnesses={args.min_witnesses})...", file=sys.stderr)
+        overrides = checker.generate_overrides(check_results, min_witnesses=args.min_witnesses)
+        
+        output_path = Path(args.auto_overrides_output)
+        
+        # Merge with existing overrides if file exists
+        if output_path.exists():
+            with open(output_path, 'r', encoding='utf-8') as f:
+                existing = json.load(f)
+            # Merge (new overrides take precedence)
+            existing.update(overrides)
+            overrides = existing
+        
+        # Save overrides
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(overrides, f, indent=2, ensure_ascii=False)
+        
+        print(f"Generated {len(overrides)} override entries: {output_path}", file=sys.stderr)
+    
+    # Save detailed check report if output specified
+    if args.output_file:
+        report = {
+            'check_results': check_results,
+            'statistics': {
+                'total_verses': len(verses),
+                'cepher_found': cepher_found,
+                'dabar_yahuah_found': dabar_found,
+                'with_suggestions': with_suggestions
+            }
+        }
+        report_path = Path(args.output_file)
+        save_report(report_path, report)
+        print(f"Detailed check report saved: {report_path}", file=sys.stderr)
     
     return 0
 
@@ -266,6 +400,10 @@ def main(args: Optional[list] = None) -> int:
     parsed_args = parser.parse_args(args)
     
     try:
+        # Handle auto-check command
+        if parsed_args.auto_check:
+            return handle_auto_check(parsed_args)
+        
         # Handle build-bible command
         if parsed_args.build_bible:
             return handle_build_bible(parsed_args)

@@ -1,0 +1,15 @@
+{
+  "title": "Test Bible",
+  "version": "v1.0",
+  "generated_date": "2026-01-14T16:26:04.501167",
+  "statistics": {
+    "total_verses": 6,
+    "books_processed": 2,
+    "chapters_processed": 2,
+    "ambiguous_lords": 0,
+    "applied_overrides": 0
+  },
+  "applied_overrides": [],
+  "ambiguous_lord_occurrences": [],
+  "heuristic_replacements": []
+}

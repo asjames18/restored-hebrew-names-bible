@@ -61,9 +61,8 @@ class ChecklistGenerator:
         
         # Check for other sensitive patterns
         # "God" vs "GOD" distinction
-        if re.search(r'\bGod\b', text) and not re.search(r'\bGOD\b', text):
-            # Only flag if it's ambiguous (not already handled by default rules)
-            # This is less critical, so we'll skip it for now
+        # Only flag if it's ambiguous (not already handled by default rules)
+        # This is less critical, so we'll skip it for now
         
         return items
     

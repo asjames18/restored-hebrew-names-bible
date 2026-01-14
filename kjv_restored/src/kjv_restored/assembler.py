@@ -68,7 +68,7 @@ class BibleAssembler:
         Yields:
             Tuples of (event_type, event_data)
         """
-        # Reset stats
+        # Reset stats for this assembly pass
         self.stats = {
             'total_verses': 0,
             'books_processed': 0,
@@ -79,6 +79,8 @@ class BibleAssembler:
         
         current_book = None
         current_chapter = None
+        books_seen = set()
+        chapters_seen = set()
         
         for verse in verses:
             book = normalize_book_name(verse.get('book', ''))
@@ -93,13 +95,18 @@ class BibleAssembler:
                     pass
                 current_book = book
                 current_chapter = None
-                self.stats['books_processed'] += 1
+                if book not in books_seen:
+                    books_seen.add(book)
+                    self.stats['books_processed'] = len(books_seen)
                 yield ("book", {"name": book, "number": self.stats['books_processed']})
             
             # New chapter
             if chapter != current_chapter:
                 current_chapter = chapter
-                self.stats['chapters_processed'] += 1
+                chapter_key = f"{book}:{chapter}"
+                if chapter_key not in chapters_seen:
+                    chapters_seen.add(chapter_key)
+                    self.stats['chapters_processed'] = len(chapters_seen)
                 yield ("chapter", {"book": book, "number": chapter})
             
             # Convert verse text
@@ -114,10 +121,15 @@ class BibleAssembler:
             
             # Track stats
             self.stats['total_verses'] += 1
-            if self.converter.get_applied_overrides():
-                self.stats['applied_overrides'] = len(self.converter.get_applied_overrides())
-            if self.converter.get_ambiguous_lords():
-                self.stats['ambiguous_lords'] = len(self.converter.get_ambiguous_lords())
+            
+            # Update override and ambiguous lord counts
+            applied = self.converter.get_applied_overrides()
+            if applied:
+                self.stats['applied_overrides'] = len(applied)
+            
+            ambiguous = self.converter.get_ambiguous_lords()
+            if ambiguous:
+                self.stats['ambiguous_lords'] = len(ambiguous)
             
             # Yield verse event
             yield ("verse", {
